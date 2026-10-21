@@ -32,6 +32,18 @@ jobs:
       - name: Run data pipeline
         run: python3 pipeline.py --workers 2
 
+      - name: Data quality gate
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          d = json.load(open("data/earnings.json"))
+          stocks, events = d["stats"]["tickers"], d["stats"]["events"]
+          print(f"gate: {stocks} stocks, {events} events")
+          if stocks < 50 or events < 100:
+              print("REFRESH LOOKS DEGRADED - keeping previous dataset")
+              sys.exit(1)
+          EOF
+
       - name: Commit updated data
         run: |
           git config user.name "github-actions[bot]"

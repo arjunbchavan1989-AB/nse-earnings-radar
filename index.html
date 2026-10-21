@@ -300,11 +300,11 @@ footer p { max-width: 90ch; margin-bottom: var(--s2); }
       <span><i class="dot" style="background:var(--down)"></i>negative</span>
       <span><i class="dot" style="background:var(--warn)"></i>delayed positive</span>
     </div>
-    <p><strong>Sales YoY / EPS YoY</strong> — reported quarter vs the same fiscal quarter a year earlier, consolidated, from screener.in quarterly tables (Rs crore). Sign-flipping EPS (loss→profit etc.) is labelled explicitly instead of showing a growth %.</p>
-    <p><strong>Beat / Miss</strong> — surprise % vs analyst consensus EPS estimate (Yahoo Finance). Coverage is best for large caps; “no est.” means no verified consensus exists for that quarter — nothing is imputed.</p>
+    <p><strong>Sales YoY / EPS YoY</strong> — reported quarter vs the same fiscal quarter a year earlier, consolidated, from screener.in quarterly tables (sales in ₹ crore, EPS in ₹ per share). Sign-flipping EPS (loss→profit etc.) is labelled explicitly instead of showing a growth %.</p>
+    <p><strong>Beat / Miss</strong> — surprise % vs analyst consensus EPS estimate (Yahoo Finance). Coverage is best for large caps; “no est.” means no verified consensus exists for that quarter — nothing is imputed. Yahoo's reported actual EPS can differ from screener.in's consolidated EPS (different reporting basis); the detail view shows both side by side.</p>
     <p><strong>Day-1 reaction</strong> — close of the first session that fully follows the announcement vs the prior close. After-close and weekend releases roll to the next session.</p>
     <p><strong>Drift +5 / +10 / +20</strong> — post-earnings announcement drift (PEAD): close 5/10/20 trading sessions after the reaction session vs the reaction close. Incomplete windows show as pending.</p>
-    <p><strong>Delayed positive</strong> — screening rule, not a predictive signal: day-1 ≤ 0% and a close above the reaction session’s high within the next 5 sessions. The trigger day is shown in the detail view.</p>
+    <p><strong>Delayed positive</strong> — screening rule, not a predictive signal: day-1 ≤ 0% and a close above the reaction session’s high within the next 5 sessions. The trigger day is shown in the detail view. Events whose 5-session window hasn’t fully elapsed yet show as pending (…).</p>
     <p><strong>Prices</strong> are dividend/split-adjusted daily closes (Yahoo Finance). <span id="src-note"></span></p>
     <p style="color:var(--faint)">Educational tool for research — not investment advice. Refresh the data by running <code>python3 pipeline.py</code>.</p>
   </footer>
@@ -354,7 +354,7 @@ const fmtNum = (v, d = 0) => v == null ? null : Number(v).toLocaleString("en-IN"
 const fmtPrice = v => v == null ? "—" : "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 1 });
 function fmtDateTime(iso) {
   const d = new Date(iso);
-  return d.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) + " IST";
 }
 function fmtDate(iso) {
   const [y, m, d] = iso.split("-");
@@ -421,11 +421,15 @@ function filtered() {
   const beat = $("beat").value;
   const minSales = $("minsales").value === "" ? null : +$("minsales").value / 100;
   const minEps = $("mineps").value === "" ? null : +$("mineps").value / 100;
-  const minSurp = $("minsurp").value === "" ? null : +$("minsurp").value / 100;
+  const minSurp = $("minsurp").value === "" ? null : +$("minsurp").value;  // surprisePct is already in percentage points
   const reaction = $("reaction").value;
   const now = Date.now();
 
   let rows = allEvents();
+  if (state.latestOnly) {
+    // each stock's chronologically latest event, before any other filter
+    rows = rows.filter(r => r.e.announcedAt === r.s.events[0].announcedAt);
+  }
   if (q) rows = rows.filter(r =>
     r.s.name.toLowerCase().includes(q) || r.s.ticker.toLowerCase().includes(q) ||
     (r.s.sector || "").toLowerCase().includes(q) || (r.s.industry || "").toLowerCase().includes(q));
@@ -441,10 +445,6 @@ function filtered() {
   if (reaction === "up") rows = rows.filter(r => (r.e.reaction.pct ?? 0) > 0);
   if (reaction === "down") rows = rows.filter(r => (r.e.reaction.pct ?? 0) < 0);
   if (state.delayedOnly) rows = rows.filter(r => r.e.delayedPositive.flag);
-  if (state.latestOnly) {
-    const seen = new Set();
-    rows = rows.filter(r => { if (seen.has(r.s.ticker)) return false; seen.add(r.s.ticker); return true; });
-  }
   return rows;
 }
 
@@ -530,6 +530,7 @@ function render() {
       "<td>" + drift(5) + "</td><td>" + drift(10) + "</td><td>" + drift(20) + "</td>" +
       "<td>" + (e.delayedPositive.flag
         ? '<span class="badge delayed">D+' + e.delayedPositive.day + "</span>"
+        : e.delayedPositive.pending ? '<span class="pending">…</span>'
         : '<span class="flat">—</span>') + "</td></tr>";
   }).join("");
   for (const tr of tbody.querySelectorAll("tr")) {
@@ -565,17 +566,17 @@ function openDrawer(ticker, announcedAt) {
   $("d-name").textContent = s.name;
   $("d-sub").textContent = s.ticker.replace(".NS", "") + " · " + (s.sector || "") + (s.industry ? " · " + s.industry : "");
   const ev = announcedAt ? s.events.find(e => e.announcedAt === announcedAt) : s.events[0];
+  const stat = (l, v, c) => '<div class="stat"><div class="l">' + l + '</div><div class="v ' + (c || "") + '">' + v + "</div></div>";
 
   let html = "";
   if (ev) {
     html += "<section><h3>Latest result — " + qtrLabel(ev.quarterEnd) + " quarter (announced " + fmtDate(ev.announcedAt.slice(0, 10)) + ")</h3>";
     html += '<div class="stat-grid">';
-    const stat = (l, v, c) => '<div class="stat"><div class="l">' + l + '</div><div class="v ' + (c || "") + '">' + v + "</div></div>";
     html += stat("Sales", ev.salesCr == null ? "—" : "₹" + fmtNum(ev.salesCr) + " cr");
     html += stat("Sales YoY", ev.salesYoy == null ? "…" : fmtPctSigned(ev.salesYoy), cls(ev.salesYoy));
-    html += stat("EPS", ev.eps == null ? "—" : "₹" + (ev.eps).toFixed(2));
+    html += stat("EPS (screener)", ev.eps == null ? "—" : "₹" + (ev.eps).toFixed(2));
     html += stat("EPS YoY", ev.epsTransition ? ev.epsTransition.replace(/-/g, " → ") : ev.epsYoy == null ? "…" : fmtPctSigned(ev.epsYoy), cls(ev.epsYoy));
-    html += stat("Surprise vs est.", ev.surprisePct == null ? "no est." : fmtSurp(ev.surprisePct), ev.surprisePct > 0 ? "pos" : ev.surprisePct < 0 ? "neg" : "flat");
+    html += stat("Surprise vs est.", ev.surprisePct == null ? "no est." : fmtSurp(ev.surprisePct) + (ev.epsEstimate != null ? '<br><span style="font-weight:400;font-size:10px;color:var(--faint)">Yahoo: act ₹' + ev.epsActualYahoo + " · est ₹" + ev.epsEstimate + "</span>" : ""), ev.surprisePct > 0 ? "pos" : ev.surprisePct < 0 ? "neg" : "flat");
     html += stat("Day-1 reaction", fmtPctSigned(ev.reaction.pct), cls(ev.reaction.pct));
     html += "</div></section>";
 
@@ -585,7 +586,7 @@ function openDrawer(ticker, announcedAt) {
     html += dstat("+5 sessions", ev.drift.d5);
     html += dstat("+10 sessions", ev.drift.d10);
     html += dstat("+20 sessions", ev.drift.d20);
-    html += stat("Delayed positive", ev.delayedPositive.flag ? "Yes — day " + ev.delayedPositive.day : "No", ev.delayedPositive.flag ? "pos" : "");
+    html += stat("Delayed positive", ev.delayedPositive.flag ? "Yes — day " + ev.delayedPositive.day : ev.delayedPositive.pending ? "pending" : "No", ev.delayedPositive.flag ? "pos" : "");
     html += "</div></section>";
   }
 
@@ -606,7 +607,7 @@ function openDrawer(ticker, announcedAt) {
       "<td>" + (e.drift.d5 == null ? "…" : fmtPctSigned(e.drift.d5)) + "</td>" +
       "<td>" + (e.drift.d10 == null ? "…" : fmtPctSigned(e.drift.d10)) + "</td>" +
       "<td>" + (e.drift.d20 == null ? "…" : fmtPctSigned(e.drift.d20)) + "</td>" +
-      "<td>" + (e.delayedPositive.flag ? "D+" + e.delayedPositive.day : "—") + "</td></tr>").join("") +
+      "<td>" + (e.delayedPositive.flag ? "D+" + e.delayedPositive.day : e.delayedPositive.pending ? "…" : "—") + "</td></tr>").join("") +
       "</tbody></table></section>";
   }
 

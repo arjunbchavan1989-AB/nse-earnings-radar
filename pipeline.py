@@ -275,6 +275,10 @@ def build_event(ev_date, er_row, prices, quarters_by_end):
     """Assemble one earnings event dict."""
     when_ist = ev_date.astimezone(IST)
     q_end = latest_quarter_end(quarters_by_end, when_ist.date())
+    # guard: if the matched quarter-end is far older than the announcement,
+    # the expected quarter is missing from the source — don't pair it (wrong YoY)
+    if q_end and (when_ist.date() - dt.date.fromisoformat(q_end)).days > 150:
+        q_end = None
     quarter = quarters_by_end.get(q_end) if q_end else None
 
     # --- event day + reaction session
@@ -293,15 +297,19 @@ def build_event(ev_date, er_row, prices, quarters_by_end):
 
     # --- delayed positive reaction: day-1 flat-or-down, then close above
     #     the reaction session's high within the next DELAYED_WINDOW sessions
-    delayed = {"flag": False, "day": None}
+    delayed = {"flag": False, "day": None, "pending": False}
     if reaction_pct is not None and reaction_pct <= 0:
+        triggered = False
         for k in range(1, DELAYED_WINDOW + 1):
             j = ri + k
             if j >= len(prices.dates):
-                break
+                break  # window still open
             if prices.closes[j] > r_high:
-                delayed = {"flag": True, "day": k}
+                delayed = {"flag": True, "day": k, "pending": False}
+                triggered = True
                 break
+        if not triggered and ri + DELAYED_WINDOW >= len(prices.dates):
+            delayed = {"flag": False, "day": None, "pending": True}
 
     # --- YoY
     yearago_end = shift_year(q_end) if q_end else None
@@ -309,7 +317,7 @@ def build_event(ev_date, er_row, prices, quarters_by_end):
     sales_yoy = growth_pct(quarter["sales"], yearago["sales"]) if (quarter and yearago) else None
     eps_cur = quarter["eps"] if quarter else None
     eps_prev = yearago["eps"] if yearago else None
-    eps_yoy = growth_pct(eps_cur, eps_prev)
+    eps_yoy = growth_pct(eps_cur, eps_prev) if (eps_prev is not None and eps_prev > 0) else None
     eps_transition = transition_label(eps_cur, eps_prev)
 
     est = safe_float(er_row.get("EPS Estimate"))
