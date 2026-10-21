@@ -9,7 +9,8 @@ Live site: `https://<account>.github.io/nse-earnings-radar/`
 ## What it shows
 
 For every earnings announcement in the tracked universe (183 liquid NSE
-large/mid caps) over the last ~2 years:
+large/mid caps; ~178 have earnings data on Yahoo Finance) over the last ~2
+years:
 
 - **Sales YoY / EPS YoY** — reported quarter vs the same fiscal quarter a year
   earlier, consolidated, in Rs crore (screener.in). Sign-flipping EPS
