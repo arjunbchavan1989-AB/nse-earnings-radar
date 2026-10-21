@@ -52,6 +52,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: master   # latest data commit (the run may have pushed one)
 
       - name: Assemble site
         run: |
