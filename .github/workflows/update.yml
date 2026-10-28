@@ -2,11 +2,12 @@ name: Update earnings data
 
 on:
   schedule:
-    # 14:00 IST nominal; GitHub queue delays mean it actually runs ~5:30-11:00 PM
-    # IST, so data is ready for the 8-9 PM IST market prep window.
+    # 14:30 IST nominal — hedge schedule. GitHub's scheduler can delay cron runs by
+    # hours (our 19:30 IST runs actually started ~1 AM IST), so this earlier trigger
+    # aims to have data ready for the 8-9 PM IST prep window. Exact timing not guaranteed.
     - cron: "0 9 * * *"
-    # 19:30 IST nominal; in practice runs ~12:30-2:00 AM IST — overnight top-up
-    # catching late-evening announcements for the next morning.
+    # 19:30 IST nominal — in practice GitHub has run this late (~1 AM IST),
+    # serving as an overnight top-up that catches late-evening announcements.
     - cron: "0 14 * * *"
   workflow_dispatch:
 
