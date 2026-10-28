@@ -2,7 +2,12 @@ name: Update earnings data
 
 on:
   schedule:
-    - cron: "0 14 * * *"   # 19:30 IST daily
+    # 14:00 IST nominal; GitHub queue delays mean it actually runs ~5:30-11:00 PM
+    # IST, so data is ready for the 8-9 PM IST market prep window.
+    - cron: "0 9 * * *"
+    # 19:30 IST nominal; in practice runs ~12:30-2:00 AM IST — overnight top-up
+    # catching late-evening announcements for the next morning.
+    - cron: "0 14 * * *"
   workflow_dispatch:
 
 permissions:
